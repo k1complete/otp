@@ -55,6 +55,7 @@
 #define FILE_READ_LINE          29
 #define FILE_FDATASYNC          30
 #define FILE_FADVISE            31
+#define FILE_FALLOCATE          32
 
 /* Return codes */
 
@@ -364,6 +365,10 @@ struct t_data
 	    Sint64 length;
 	    int advise;
 	} fadvise;
+	struct {
+	    Sint64 offset;
+	    Sint64 length;
+	} fallocate;
     } c;
     char b[1];
 };
@@ -1665,6 +1670,17 @@ static void invoke_fadvise(void *data)
     d->result_ok = efile_fadvise(&d->errInfo, fd, offset, length, advise);
 }
 
+static void invoke_fallocate(void *data)
+{
+    struct t_data *d = (struct t_data *) data;
+    int fd = (int) d->fd;
+    off_t offset = (off_t) d->c.fallocate.offset;
+    off_t length = (off_t) d->c.fallocate.length;
+
+    d->again = 0;
+    d->result_ok = efile_fallocate(&d->errInfo, fd, offset, length);
+}
+
 static void free_readdir(void *data)
 {
     struct t_data *d = (struct t_data *) data;
@@ -1955,6 +1971,7 @@ file_async_ready(ErlDrvData e, ErlDrvThreadData data)
       case FILE_RENAME:
       case FILE_WRITE_INFO:
       case FILE_FADVISE:
+      case FILE_FALLOCATE:
 	reply(desc, d->result_ok, &d->errInfo);
 	free_data(data);
 	break;
@@ -2386,6 +2403,20 @@ file_output(ErlDrvData e, char* buf, int count)
         d->c.fadvise.offset = get_int64((uchar*) buf);
         d->c.fadvise.length = get_int64(((uchar*) buf) + sizeof(Sint64));
         d->c.fadvise.advise = get_int32(((uchar*) buf) + 2 * sizeof(Sint64));
+        goto done;
+    }
+
+    case FILE_FALLOCATE:
+    {
+        d = EF_SAFE_ALLOC(sizeof(struct t_data));
+
+        d->fd = fd;
+        d->command = command;
+        d->invoke = invoke_fallocate;
+        d->free = free_data;
+        d->level = 2;
+        d->c.fallocate.offset = get_int64((uchar*) buf);
+        d->c.fallocate.length = get_int64(((uchar*) buf) + sizeof(Sint64));
         goto done;
     }
 
